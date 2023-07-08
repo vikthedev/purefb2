@@ -180,8 +180,8 @@ class PureFb2:
         replaces.append([r'(?:<empty-line/>\s*)?(<p>(?:^</p>)*?)?(<image[^>]+>)((?:^<p>)*?</p>)?(?:\s*<empty-line/>)?',
                          r'\g<1></p>\g<2><p>\g<3>'])
         # clean up tails from previous replace
-        replaces.append([r'<p>(\s*)<((?:p|title|annotation|section)|(?:/section|/title))>', r'\g<1><\g<2>>'])
-        replaces.append([r'<((?:/p|/title|/annotation)|(?:section|title))>(\s*)</p>', r'<\g<1>>\g<2>'])
+        replaces.append([r'<p>(\s*)<((?:p|title|annotation|section|subtitle)|(?:/section|/title))>', r'\g<1><\g<2>>'])
+        replaces.append([r'<((?:/p|/title|/annotation|/subtitle)|(?:section|title))>(\s*)</p>', r'<\g<1>>\g<2>'])
         replaces.append([r'<p>(\s*)</p>', r'\g<1>'])
 
         # optimize & transform subtitle
