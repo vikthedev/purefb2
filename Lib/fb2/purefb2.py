@@ -180,8 +180,8 @@ class PureFb2:
         replaces.append([r'(?:<empty-line/>\s*)?(<p>(?:^</p>)*?)?(<image[^>]+>)((?:^<p>)*?</p>)?(?:\s*<empty-line/>)?',
                          r'\g<1></p>\g<2><p>\g<3>'])
         # clean up tails from previous replace
-        replaces.append([r'<p>(\s*)<((?:p|title|annotation|section|subtitle)|(?:/section|/title))>', r'\g<1><\g<2>>'])
-        replaces.append([r'<((?:/p|/title|/annotation|/subtitle)|(?:section|title))>(\s*)</p>', r'<\g<1>>\g<2>'])
+        replaces.append([r'<p>(\s*)<((?:p|title|annotation|section|subtitle|poem|cite|text-author)|(?:/section|/title))>', r'\g<1><\g<2>>'])
+        replaces.append([r'<((?:/p|/title|/annotation|/subtitle|/poem|/cite|/text-author)|(?:section|title))>(\s*)</p>', r'<\g<1>>\g<2>'])
         replaces.append([r'<p>(\s*)</p>', r'\g<1>'])
 
         # optimize & transform subtitle
@@ -213,7 +213,7 @@ class PureFb2:
                 # False True 'Force'
                 if args.get('image', False) is not False:
                     self.__optimize_images()
-                xml = str(self.__soup.prettify()) if args.get('typography', False) is not False else str(self.__soup)
+                xml = str(self.__soup.prettify()) if args.get('prettify', False) is not False else str(self.__soup)
                 if xml is not None:
                     if args.get('paragraph', False) is not False:
                         xml = self.__optimize_paragraphs(xml)
@@ -221,8 +221,11 @@ class PureFb2:
                         # add the end promo
                         xml = re.sub(r'(?<=</section>)\s*(?=</body>)',
                                      r'\n{}\n'.format(get_promo(src_url=self.url, book_title=self.title)), xml)
+                    else:
+                        xml = re.sub(r'<custom-info[\s\S]+?</custom-info>\s*', '', xml)
+                        xml = re.sub(r'<section>\s*<title>\s*<p>\s*Nota bene\s*</p>[\s\S]+?</section>\s*', '', xml)
                     with open(self.__destination, 'w+', encoding='utf-8') as f:
-                        if args.get('typography', False) is not False:
+                        if args.get('prettify', False) is not False:
                             f.write(prettierfier.prettify_fb2(xml))
                         else:
                             f.write(xml)
