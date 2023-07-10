@@ -1,7 +1,10 @@
 __all__ = (
+    'ANYDASH',
     'ANYSP',
     'DLQUO',
     'DPRIME',
+    'FDASH',
+    'HMINUS',
     'LAQUO',
     'LDQUO',
     'LSQUO',
@@ -23,15 +26,20 @@ __all__ = (
 NBSP = '\u00A0'
 NNBSP = '\u202F'
 THNSP = '\u2009'
-WHSP = ' '
+WHSP = '\u0020'
 ANYSP = r'[{}{}{}{}]'.format(WHSP, NBSP, NNBSP, THNSP)
 
+HMINUS = '-'  # HYPHEN-MINUS
+MINUS = '−'
+FDASH = '‒'  # FIGURE DASH
 NDASH = '–'
 MDASH = '—'
-MDASH_PAIR = NNBSP + MDASH + THNSP
+# MDASH_PAIR = NNBSP + MDASH + THNSP
+MDASH_PAIR = NBSP + MDASH + WHSP
 HYPHEN = ''
 
-MINUS = '−'
+ANYDASH = r'[{}{}{}{}{}]'.format(HMINUS, MINUS, FDASH, NDASH, MDASH)
+
 TIMES = '×'
 
 LSQUO = '‘'  # left curly quote mark

@@ -247,7 +247,7 @@ class EnRuExpressions(BaseExpressions):
 
         expr = (
             # Double dash guarantees to be replaced with mdash
-            (r'{0}--{0}'.format(WHSP), MDASH_PAIR),
+            (r'{0}--{0}'.format(ANYSP), MDASH_PAIR),
 
             # Dash can be between anything except digits
             # because in that case it's not obvious
@@ -267,7 +267,11 @@ class EnRuExpressions(BaseExpressions):
              r'{0}{1}'.format(NBSP, MDASH)),
 
             # Special case with leading comma
-            (',' + MDASH_PAIR, f',{MDASH}{THNSP}'),
+            # look at http://old-rozental.ru/punctuatio.php?sid=176
+            # (',' + MDASH_PAIR, f',{MDASH}{WHSP}'),
+
+            # Special case with leading punctuation
+            (r'([,\.!\?;])' + ANYSP + ANYDASH + ANYSP, f'\\g<1>{NBSP}{MDASH}{WHSP}'),
         )
         return expr
 
@@ -414,7 +418,7 @@ class EnRuExpressions(BaseExpressions):
 
         expr = (
             (r'\b({1}\.){0}*({1}\.)'.format(ANYSP, self.words),
-             r'\1{0}\2'.format(NNBSP)),
+             r'\1{0}\2'.format(NBSP)),
             (r'\b({1}\.){0}*(?={1})'.format(WHSP, self.words),
              r'\1{0}'.format(NBSP)),
         )

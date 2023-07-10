@@ -2,7 +2,6 @@
 import base64
 import io
 import re
-import sys
 
 from PIL import Image
 from bs4 import BeautifulSoup
@@ -91,7 +90,8 @@ class PureFb2:
         MDASH = '—'  # EM DASH
         # TMDASH = '⸺'  # TWO-EM DASH
         ANYDASH = r'[{}{}{}{}{}]'.format(HMINUS, MINUS, FDASH, NDASH, MDASH)
-        MDASH_PAIR = NNBSP + MDASH + THNSP
+        # MDASH_PAIR = NNBSP + MDASH + THNSP
+        MDASH_PAIR = NBSP + MDASH + WHSP
 
         starts_at = content.find('<body')
         ends_at = content.rfind('</body>') + len('</body>')
@@ -114,9 +114,9 @@ class PureFb2:
 
         # add space after any dashes at dialogue & convert it into the md dash
         replaces.append([ANYSP + ANYDASH + ANYSP, MDASH_PAIR])
-        replaces.append([r'<p>' + ANYDASH + ANYSP, '<p>' + MDASH + THNSP])
-        replaces.append(['>' + ANYDASH + r'([<A-ZА-ЯҐІЇЄ\.,\'«"])', '>' + MDASH + THNSP + r'\g<1>'])
-        replaces.append([ANYSP + ANYDASH + r'([<A-ZА-ЯҐІЇЄ\.,\'«"])', MDASH + THNSP + r'\g<1>'])
+        replaces.append([r'<p>' + ANYDASH + ANYSP, '<p>' + MDASH + NBSP])
+        replaces.append(['>' + ANYDASH + r'([<A-ZА-ЯҐІЇЄ\.,\'«"])', '>' + MDASH + NBSP + r'\g<1>'])
+        replaces.append([ANYSP + ANYDASH + r'([<A-ZА-ЯҐІЇЄ\.,\'«"])', MDASH + NBSP + r'\g<1>'])
 
         # optimize empty tags:
         # <strong|emphasis> </strong|emphasis>
@@ -295,40 +295,41 @@ class PureFb2:
         if xml != '':
             # xml = re.sub(r'<p>([\s\S]+?)</p>', self.convert_to_lower, xml)
             xml = re.sub(r'<p>([\s\S]+?)</p>', lambda x: ru_typus(x.group()), xml)
+
+            # Special case with leading punctuation
             # см. http://old-rozental.ru/punctuatio.php?sid=176
-            xml = re.sub(',— ', ', — ', xml)
+            #xml = re.sub(r'([,\.!\?;]) — ', r'\g<1> — ', xml)
         return xml
 
     def __optimize_images(self) -> None:
         if self.__soup is not None:
             for binary in self.__soup.find_all('binary'):
                 if binary.get('content-type') in ['image/jpg', 'image/jpeg', 'image/png']:
-                    binary['content-type'] = 'image/jpg'
                     # binary['id'] = re.sub(r'(.+?)\\.(jpeg|jpg|png)', r'\g<1>.jpg', binary.get('id'))
                     binary.string = self.__optimize_image(binary.text, binary.get('content-type'))
+                    binary['content-type'] = 'image/jpg'
                     print(binary.get('id'))
 
     def __optimize_image(self, raw, mime: str):
         if raw:
-            if mime in ['image/jpg', 'image/png']:
+            if mime in ['image/jpeg', 'image/jpg', 'image/png']:
                 with Image.open(io.BytesIO(base64.b64decode(raw))) as image:
-                    image.thumbnail((640, 480))
-                    stream = io.BytesIO()
 
                     if mime == 'image/png':
+                        image = image.convert('RGBA')
                         data = image.getdata()
                         new_data = []
                         for item in data:
                             if item[3] == 0:
-                                if item[0] == 0 and item[1] == 0 and item[2] == 0:
-                                    new_data.append((255, 255, 255, 1))
-                                else:
-                                    new_data.append((item[0], item[1], item[2], 1))
+                                new_data.append((239, 238, 238, 255))
                             else:
                                 new_data.append(item)
                         image.putdata(new_data)
-                    image = image.convert('RGB')
+                        image = image.convert('RGB')
 
-                    image.save(stream, format="JPEG", subsampling=2, quality=60)
+                    image.thumbnail((640, 480))
+                    stream = io.BytesIO()
+                    # image.save(stream, format="JPEG", subsampling=2, quality=60)
+                    image.save(stream, format="JPEG", subsampling=2, quality='medium')
                     raw = base64.b64encode(stream.getvalue()).decode()
         return raw
