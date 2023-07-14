@@ -34,7 +34,7 @@ out_format = 'fb2'
 # {current_time} - current time in %Y-%m-%d %H:%M
 # {current_date} - current time in %Y-%m-%d
 # {book_time} - original book modified time in %Y-%m-%d %H:%M (Author.today's based)
-name_format = '{seq_num} {title}'
+name_format = '{author_lf} - {title}'
 
 document = {
     'author_name': 'Viktor',  # 'Цокольный этаж',
@@ -83,6 +83,16 @@ author_replaces = [
         'patterns': [
             (r'(<section>\s*<title>\s*<p>.+?</p>\s*</title>\s*)(?:(?:<p>.*?</p>|<p/>|<empty-line/>)\s*){1,4}(<p>глава)', r'\g<1>\g<2>', re.IGNORECASE),
             (r'(<title>\s*<p>.*?(глава\s+\d+).*?</p>\s*</title>\s*)<p>\2</p>', r'\g<1>', re.IGNORECASE)
+        ]
+    },
+    {
+        'name': 'grimuare',
+        'patterns': [
+            (r'(?<=[?!.:а-я0-9A-Za-z\…’)])(</\w+>)*(<\w+>)*(?=[А-Я—\-«\'])', r'\1</p>\n<p>\2'),
+            (r'\*\*\*+', r'</p>\n<subtitle>* * *</subtitle>\n<p>'),
+            (r'([\w])</p>\n<p>(-[\w])', r'\1\2'),
+            ('</p>\n<p/>', '</p>'),
+            ('>\n<p></p>', '>')
         ]
     }
 ]

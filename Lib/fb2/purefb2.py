@@ -159,7 +159,7 @@ class PureFb2:
     __soup: BeautifulSoup | None
 
     def __init__(self, source: str = '', destination: str = ''):
-        self._debug = False
+        self._debug = True
         self._time_modified = None
         self._time_created = None
         self._custom_tags: list = []
@@ -167,7 +167,7 @@ class PureFb2:
         self._author_replaces: list = []
         self._document_info: list = []
         self._out_format: list = ['fb2']
-        self._out_name_format: str = '{author_last_first} - {title}'
+        self._out_name_format: str = '{author_lf} - {title}'
         self._atinfo: Optional[ATInfo] = None
         self._at_ready: bool = True
         self.__source = source
@@ -300,7 +300,7 @@ class PureFb2:
     def get_file_name(self) -> str:
         return file_safe(self.name_format.format(
             author=self.author,
-            author_last_first=self.author_last_first,
+            author_lf=self.author_last_first,
             title=self.title,
             seq_name=self.sequence['name'],
             seq_num=self.sequence['number'],
@@ -329,7 +329,7 @@ class PureFb2:
         if self.__soup is not None:
 
             self._time_created = datetime.now().strftime('%Y-%m-%d %H:%M')
-            self._time_modified = self.atinfo.time_modified if self.atinfo.is_valid() else self._time_created
+            self._time_modified = self.atinfo.time_updated if self.atinfo.is_valid() else self._time_created
 
             if destination != '':
                 self.__destination = destination
@@ -409,11 +409,11 @@ class PureFb2:
         return self if self.is_opened else False
 
     def set_out_format(self, out_format: list | str) -> Self:
-        self._out_format = out_format
+        self.out_format = out_format
         return self if self.is_opened else False
 
     def set_name_format(self, out_name_format: str) -> Self:
-        self._out_name_format = out_name_format
+        self.name_format = out_name_format
         return self if self.is_opened else False
 
     def add_custom_tag(self, name: str, value: str) -> Self:
@@ -537,7 +537,7 @@ class PureFb2:
             clear_tags(parent, 'date')
             date_tag = self.__soup.new_tag('date')
             # date_value = self.atinfo.time_modified if self.atinfo.is_valid() else datetime.now().strftime('%Y-%m-%d %H:%M')
-            date_value = self.atinfo.time_modified
+            date_value = self.atinfo.time_updated
             date_tag['value'] = date_value
             date_tag.string = date_value
             parent.append(date_tag)
