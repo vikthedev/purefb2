@@ -160,7 +160,7 @@ class PureFb2:
     __soup: BeautifulSoup | None
 
     def __init__(self, source: str = '', destination: str = ''):
-        self._debug = True
+        self._debug = False
         self._time_modified = None
         self._time_created = None
         self._custom_tags: list = []
