@@ -5,8 +5,6 @@ import os
 import subprocess
 import sys
 import time
-from pathlib import Path
-
 
 class System(object):
     @staticmethod
@@ -51,18 +49,27 @@ def print_end(line: str, end='\n') -> None:
     sys.stdout.flush()
 
 
-def file_get_contents(filename: str, encoding='utf-8') -> str | bool:
-    if Path(filename).is_file():
-        return Path(filename).read_text(encoding)
-    else:
-        return False
+def file_get(filename: str, encoding='utf-8') -> str | bool:
+    try:
+        with open(filename, 'r+', encoding=encoding) as file:
+            file.read()
+            return True
+    except EnvironmentError:
+        pass
+    return False
 
 
-def file_put_contents(filename: str, data='', encoding='utf-8') -> int:
-    return Path(filename).write_text(data, encoding)
+def file_put(filename: str, data='', encoding='utf-8') -> int:
+    try:
+        with open(filename, 'w+', encoding=encoding) as file:
+            file.write(data)
+            return True
+    except EnvironmentError:
+        pass
+    return False
 
 
-def file_get_contents_base64(filename: str) -> str:
+def file_get_base64(filename: str) -> str:
     # with open(filename, "rb") as file:
     with io.open(filename, "rb", buffering=0) as file:
         return str(base64.b64encode(file.read()))
