@@ -17,6 +17,7 @@ from bs4 import BeautifulSoup, Tag, NavigableString
 
 from Lib.fb2.atinfo import ATInfo
 from Lib.fb2.zipper import InMemoryZipper
+from Lib.transliterator import to_latin
 from Lib.typus import ru_typus
 
 
@@ -353,7 +354,7 @@ class PureFb2:
                         if self._debug:
                             print(os.path.join(self.__destination, file_name + '.fb2.zip'))
                         with InMemoryZipper(os.path.join(self.__destination, file_name + '.fb2.zip')) as imz:
-                            imz.append(file_name + '.fb2', xml)
+                            imz.append(to_latin(file_name, 'lower', True) + '.fb2', xml)
                 except EnvironmentError:
                    pass
 
