@@ -49,7 +49,7 @@ CYR_TO_LAT_MAP = {
 }
 
 
-def to_latin(data: str = '', case: str | None = None, file_safe: bool = False):
+def to_latin(data: str = '', case: str | None = None, file_friendly_name: bool = False):
     """ Transliterate cyrillic string of characters to latin string of characters.
     :param file_safe:
     :param case:
@@ -81,15 +81,13 @@ def to_latin(data: str = '', case: str | None = None, file_safe: bool = False):
             latinized_data += c
 
     # Return the transliterated string.
-    if file_safe:
-        latinized_data = __file_friendly(latinized_data, None)
+    if file_friendly_name:
+        latinized_data = __file_friendly_name(latinized_data, None)
     return latinized_data
 
 
-def __file_friendly(data: str = '', case: str | None = None) -> str:
+def __file_friendly_name(data: str = '', case: str | None = None) -> str:
     data = re.sub(r'["\\?!@#$%^&*+|/:;\[\]{}<>\']', '', data)
     data = re.sub(r'["—]', '-', data)
-    data = re.sub(r'[\s\\(\\)]+', ' ', data)
-    data = re.sub(r'[ \\\.]', '_', data)
-    print(data)
+    data = re.sub(r'[\s\\(\\)\\\.]+', '_', data)
     return data.strip('. _')

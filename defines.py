@@ -15,10 +15,12 @@ try:
         cursor = db.cursor()
         authors_dict = cursor.execute(f'select * from author_rename').fetchall()
         authors_dict = dict({item[0]: item[1] for item in authors_dict})
-except EnvironmentError:
+except EnvironmentError as err:
+    print(f'Authors Dict Error: {err}')
     authors_dict = {}
     pass
 
+# allow to switch off the Author.Today checker
 at_enabled = True
 # allowed tags in out format:
 # 'zip' - fb2.zip

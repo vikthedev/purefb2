@@ -139,7 +139,7 @@ class ATInfo:
         return self
 
     def get(self, url: str) -> Self:
-        self.url = url
+        self.url = url if url is not None else ''
         return self
 
     def is_valid(self) -> bool:
@@ -152,7 +152,8 @@ class ATInfo:
                                   headers={'Authorization': 'Bearer guest'}) as response:
                     if 'id' in (resp := response.json()):
                         self.__data = resp
-            except EnvironmentError:
+            except EnvironmentError as err:
+                print(f'AT Connection Error: {err}')
                 pass
 
     def __convert_date(self, data: str):

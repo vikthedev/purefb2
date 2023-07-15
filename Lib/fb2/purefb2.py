@@ -3,6 +3,7 @@
 __all__ = "PureFb2"
 
 import os
+import sys
 from datetime import datetime
 from typing import Self, Optional
 
@@ -111,15 +112,15 @@ def prettify_fb2(data: str = '', indent: int = 1):
 
     # Inlining common inline elements
     # inline start
-    replaces.append([r'[\n\s]*(<(strong|emphasis)>)[\n\s]*', r' \g<1>', re.DOTALL])
+    replaces.append([r'[\n\s]*(<(strong|emphasis|strikethrough|sup|sub|code)>)[\n\s]*', r' \g<1>', re.DOTALL])
     # inline a start
     replaces.append([r'[\n\s]*(<a .+?>)[\n\s]*', r' \g<1>', re.DOTALL])
     # Removes whitespace between end of inline tags and beginning of new tag
     # inline end
-    replaces.append([r'[\n\s]*(</(strong|a|emphasis)>)[\n\s]*(?=<)', r'\g<1>', re.DOTALL])
+    replaces.append([r'[\n\s]*(</(strong|a|emphasis|strikethrough|sup|sub|code)>)[\n\s]*(?=<)', r'\g<1>', re.DOTALL])
     # Adds a space between the ending inline tags and following words
     # inline space
-    replaces.append([r'[\n\s]*(</(strong|a|emphasis)>)([a-zA-Zа-яґіїєА-ЯҐІЇЄ0-9])', r'\g<1> \g<3>', re.DOTALL])
+    replaces.append([r'[\n\s]*(</(strong|a|emphasis|strikethrough|sup|sub|code)>)([a-zA-Zа-яґіїєА-ЯҐІЇЄ0-9])', r'\g<1> \g<3>', re.DOTALL])
     # Removes spaces between nested inline tags
     # nested spaces start
     replaces.append([r'(<[^/]*?>) (?=<)', r'\g<1>', 0])
@@ -319,7 +320,9 @@ class PureFb2:
                     self.__soup = BeautifulSoup(file, "xml")
                     # try to add additional author.today information
                     self.atinfo = self.url
-            except EnvironmentError:
+            except EnvironmentError as err:
+                if self._debug:
+                    print(f'Book opening Error: {err}')
                 pass
         return self if self.is_opened else False
 
@@ -355,8 +358,10 @@ class PureFb2:
                             print(os.path.join(self.__destination, file_name + '.fb2.zip'))
                         with InMemoryZipper(os.path.join(self.__destination, file_name + '.fb2.zip')) as imz:
                             imz.append(to_latin(file_name, 'lower', True) + '.fb2', xml)
-                except EnvironmentError:
-                   pass
+                except EnvironmentError as err:
+                    if self._debug:
+                        print(f'Saving book to ZIP Error: {err}')
+                    pass
 
                 try:
                     if 'fb2' in self.out_format:
@@ -364,7 +369,9 @@ class PureFb2:
                             print(os.path.join(self.__destination, file_name + '.fb2'))
                         with open(os.path.join(self.__destination, file_name + '.fb2'), 'w+', encoding='utf-8') as file:
                             file.write(xml)
-                except EnvironmentError:
+                except EnvironmentError as err:
+                    if self._debug:
+                        print(f'Saving book to FB2 Error: {err}')
                     pass
         return self
 
@@ -395,7 +402,6 @@ class PureFb2:
                 # Special case with leading punctuation
                 # см. http://old-rozental.ru/punctuatio.php?sid=176
                 # new_body = re.sub(r'([,\.!\?;]) — ', r'\g<1> — ', new_body)
-
             soup = BeautifulSoup('<xml ' + ' '.join(get_namespaces(self.__soup)) + '>' + new_body + '</xml>', 'xml')
             new_body = soup.select_one('xml')
             body.replace_with(new_body)
@@ -671,14 +677,31 @@ class PureFb2:
         replaces.append(['>' + ANYDASH + r'([<A-ZА-ЯҐІЇЄ\.,\'«"])', '>' + MDASH + NBSP + r'\g<1>'])
         replaces.append([ANYSP + ANYDASH + r'([<A-ZА-ЯҐІЇЄ\.,\'«"])', MDASH + NBSP + r'\g<1>'])
 
+        # clean up bold, italic, underline, strike HTML tags
+        replaces.append([r'<([b|i|u|s])>([\s\S]*?)</\1>', r'\g<2>', re.IGNORECASE])
+        replaces.append([r'<([b|i|u|s])\s*/>', '', re.IGNORECASE])
+
         # optimize empty tags:
-        # <strong|emphasis> </strong|emphasis>
+        # <strong|emphasis|strikethrough|sup|sub|code}> </strong|emphasis|strikethrough|sup|sub|code>
         # <emphasis> <strong> </strong> </emphasis>
         # <strong> <emphasis> </emphasis> </strong>
-        # <strong|emphasis />
-        replaces.append([
-            r'(?:<(strong|emphasis)>\s*</\1>|<emphasis>\s*<strong>\s*</strong>\s*</emphasis>|<strong>\s*<emphasis>\s*</emphasis>\s*</strong>|<(?:strong|emphasis)\s*/>)',
-            ' '])
+        # <strong|emphasis|strikethrough|sup|sub|code />
+        # replaces.append([
+        #    r'(?:'
+        #    r'<(strong|emphasis|strikethrough|sup|sub|code)>?\s*<(strong|emphasis|strikethrough|sup|sub|code)>\s*<(strong|emphasis|strikethrough|sup|sub|code)>\s*</\3>\s*</\2>\s*</\1>|'
+        #    r'<(strong|emphasis|strikethrough|sup|sub|code)>?\s*<(strong|emphasis|strikethrough|sup|sub|code)>\s*</\2>\s*</\1>|'
+        #    r'<(strong|emphasis|strikethrough|sup|sub|code)>\s*</\1>|'
+        #    r'<(?:strong|emphasis|strikethrough|sup|sub|code)\s*/>'
+        #    r')',
+        #    ' '])
+        replaces.append([r'<(?:strong|emphasis|strikethrough|sup|sub|code)\s*/>', ' '])
+        # instead one very big expression we will repite one the same 6th times :)
+        replaces.append([r'<(strong|emphasis|strikethrough|sup|sub|code)>\s*</\1>', ' '])
+        replaces.append([r'<(strong|emphasis|strikethrough|sup|sub|code)>\s*</\1>', ' '])
+        replaces.append([r'<(strong|emphasis|strikethrough|sup|sub|code)>\s*</\1>', ' '])
+        replaces.append([r'<(strong|emphasis|strikethrough|sup|sub|code)>\s*</\1>', ' '])
+        replaces.append([r'<(strong|emphasis|strikethrough|sup|sub|code)>\s*</\1>', ' '])
+        replaces.append([r'<(strong|emphasis|strikethrough|sup|sub|code)>\s*</\1>', ' '])
 
         # convert multyspaces into the one
         replaces.append([ANYSP + '{2, }', ' '])
@@ -734,25 +757,26 @@ class PureFb2:
                          r'\g<1></p>\g<2><p>\g<3>'])
         # clean up tails from previous replace
         replaces.append(
-            [r'<p>(\s*)<((?:p|title|annotation|section|subtitle|poem|cite|text-author)|(?:/section|/title))>',
+            [r'<p>(\s*)<((?:p|title|epigraph|annotation|section|subtitle|poem|cite|text-author)|(?:/section|/title|/epigraph))>',
              r'\g<1><\g<2>>'])
-        replaces.append([r'<((?:/p|/title|/annotation|/subtitle|/poem|/cite|/text-author)|(?:section|title))>(\s*)</p>',
+        replaces.append([r'<((?:/p|/title|/epigraph|/annotation|/subtitle|/poem|/cite|/text-author)|(?:section|title|epigraph))>(\s*)</p>',
                          r'<\g<1>>\g<2>'])
         replaces.append([r'<p>(\s*)</p>', r'\g<1>'])
 
         # optimize & transform subtitle
         # <empty-line/><p|subtitle>***</p|subtitle><empty-line/>
-        # <empty-line/><p|subtitle><strong|emphasis>* * * *</strong|emphasis></p|subtitle><empty-line/>
+        # <empty-line/><p|subtitle><strong|emphasis|strikethrough|sup|sub|code>* * * *</strong|emphasis|strikethrough|sup|sub|code></p|subtitle><empty-line/>
         # <empty-line/><p|subtitle><strong><emphasis>* *</emphasis></strong></p|subtitle><empty-line/>
         # <empty-line/><p|subtitle><emphasis><strong>******</strong></emphasis></p|subtitle><empty-line/>
         ANYSUB = r'(?:[\*_~\{}\{}\{}\{}\{}] ?)'.format(HMINUS, MINUS, FDASH, NDASH, MDASH)
         replaces.append([
-            r'(?:(?:<empty-line */>)\s*)*<(p|subtitle)> ?(?:(?:<(strong|emphasis)> ?' + ANYSUB +
+            r'(?:(?:<empty-line */>)\s*)*<(p|subtitle)> ?(?:(?:<(strong|emphasis|strikethrough|sup|sub|code)> ?' + ANYSUB +
             r'+? ?</\2>)|(?:<strong> ?<emphasis> ?' + ANYSUB +
             r'+? ?</emphasis> ?</strong>)|(?: ?<emphasis> ?<strong> ?' + ANYSUB +
             r'+? ?</strong> ?</emphasis>)|' + ANYSUB +
             r'+?) ?</\1>(?:\s*(?:<empty-line */>))*',
             '<subtitle>* * *</subtitle>'])
+
         # content = header + content + footer
         # sys.exit()
         return replaces
@@ -786,6 +810,8 @@ class PureFb2:
         if self.__soup is not None:
             if (url := self.__soup.find('document-info').findChild('src-url')) is not None:
                 url = url.text
+            else:
+                url = ''
         return url
 
     def __get_sequence(self, safe: bool = True) -> dict:
