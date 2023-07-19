@@ -8,6 +8,14 @@ import re
 import requests
 
 
+def normalize_text(data: str = '', strip_dots: bool = False, check_single_letters: bool = False) -> str:
+    data = re.sub(r'(?<![\.\?\!])\.{2,5}(?!\.)', '…', data).replace('Ё', 'Е').replace('ё', 'е').strip().strip('_ ')
+    if strip_dots:
+        if not check_single_letters or (check_single_letters and not re.match(r'^(\w\.\s*)+$', data)):
+            data = data.strip('…._ ')
+    return data
+
+
 class ATInfo:
     def __init__(self, available: bool = True):
         self.__url: Optional[str] = None
@@ -169,8 +177,8 @@ class ATInfo:
         """
         author = []
         if name is not None:
-            name = name.replace('Ё', 'Е').replace('ё', 'е').strip().removesuffix('.')
-            name = re.sub(r'\s+', ' ', name)
+            #name = name.replace('Ё', 'Е').replace('ё', 'е').strip()
+            name = re.sub(r'\s+', ' ', name).strip()
             if name != '':
                 name = name.split(' ')
                 match namelen := len(name):
@@ -181,7 +189,7 @@ class ATInfo:
                     case 1:
                         author = [name[0], '', '']
                     case _:
-                        author = [name[0], ' '.join(list[1:namelen - 2]), name[-1]]
+                        author = [name[0], ' '.join(name[1:namelen - 1]), name[-1]]
                 if username is not None:
                     author.append(self.__author_url.format(username.lower().strip()))
         return author if len(author) > 0 else None

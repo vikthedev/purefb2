@@ -79,15 +79,14 @@ def to_latin(data: str = '', case: str | None = None, file_friendly_name: bool =
         # it is most likely a number or a special character so just keep it.
         else:
             latinized_data += c
-
     # Return the transliterated string.
     if file_friendly_name:
-        latinized_data = __file_friendly_name(latinized_data, None)
+        latinized_data = __file_friendly_name(latinized_data)
     return latinized_data
 
 
-def __file_friendly_name(data: str = '', case: str | None = None) -> str:
-    data = re.sub(r'["\\?!@#$%^&*+|/:;\[\]{}<>\']', '', data)
-    data = re.sub(r'["—]', '-', data)
+def __file_friendly_name(data: str = '') -> str:
+    data = re.sub(r'["\\?!@#$%^&*+|/:;\[\]{}<>\',]', '', data)
+    data = re.sub(r'[{}{}{}{}{}]'.format('-', '−', '‒', '–', '—'), '-', data)
     data = re.sub(r'[\s\\(\\)\\\.]+', '_', data)
     return data.strip('. _')

@@ -1,19 +1,31 @@
 #!/usr/bin/python
-from zipfile import ZipFile, ZIP_DEFLATED
+import os
+from zipfile import ZipFile, ZipInfo, ZIP_DEFLATED
 from os.path import basename
-from io import BytesIO as StringIO
+from io import BytesIO as StringIO, BytesIO
+
 
 class Zipper:
 
-    def __init__(self, source: str, destination: str):
+    def __init__(self, source: str | BytesIO, destination: str = ''):
         self.__source = source
         self.__destination = destination
+
+    def open(self):
+        file = ''
+        with ZipFile(self.__source, mode='r') as zf:
+            if len(zf.filelist) == 1:
+                file = zf.read(zf.filelist[0]).decode('utf-8')
+            else:
+                print('\'{0}\' is not valid FB2.zip file'. format(os.path.basename(self.__source)))
+        return file
 
     def save(self):
         with ZipFile(self.__destination + '.zip',
                      mode='w',
                      compression=ZIP_DEFLATED,
                      compresslevel=7) as zf:
+            # file = ZipInfo(self.__source, time.localtime())
             zf.write(self.__source, basename(self.__destination))
         return basename(self.__destination) + '.zip'
 
@@ -48,8 +60,9 @@ class InMemoryZipper(object):
         for zfile in self.in_memory_zip.filelist:
             zfile.create_system = 0
         self.in_memory_zip.close()
-        with open(filename, 'wb') as f:
-            f.write(self.data)
+        if filename is not None:
+            with open(filename, 'wb') as f:
+                f.write(self.data)
 
     @property
     def data(self):
@@ -59,6 +72,6 @@ class InMemoryZipper(object):
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        if self._file_name is None:
-            return
+        # if self._file_name is None:
+        #    return
         self.write_to_file(self._file_name)
