@@ -114,7 +114,7 @@ def normalize_text(data: str = '', strip_dots: bool = False, check_single_letter
     data = re.sub(r'(?<![\.\?\!])\.{2,5}(?!\.)', '…', data).replace('Ё', 'Е').replace('ё', 'е').strip().strip('_ ')
     if strip_dots:
         if not check_single_letters or (check_single_letters and not re.match(r'^(\w\.\s*)+$', data)):
-            data = data.rstrip('…._ ')
+            data = data.rstrip('._ ')
     return data
 
 
@@ -180,7 +180,10 @@ def prettify_fb2(data: str = '', indent: int = 1):
     # Removes spaces between nested end tags--which don't have attributes
     # so can be differentiated by string only content
     # nested spaces end
-    replaces.append([r'(</\w*?>) (?=</)', r'\g<1>'])
+    replaces.append([rf'(</\w*?>){ANYSP}(?=</)', r'\g<1>'])
+
+    # Removes spaces between left parenthesis and nested inline tag
+    replaces.append([rf'(?<=\(){ANYSP}+(?=<)', r''])
 
     # quot
     replaces.append([r'(&quot;)', '"'])
@@ -217,6 +220,7 @@ class PureFb2:
 
     def __init__(self, source: str = '', destination: str = ''):
         self._debug = False
+        self._open_time = None
         self._time_modified = None
         self._time_created = None
         self._custom_tags: list = []
@@ -227,6 +231,7 @@ class PureFb2:
         self._out_name_format: str = '{author_lf} - {title}'
         self._atinfo: Optional[ATInfo] = None
         self._at_ready: bool = True
+        self._convert_images: Optional[bool] = None
         self.__source = source
         self.__destination = destination
         self.__finished = None
@@ -380,6 +385,7 @@ class PureFb2:
         return self.open(source)
 
     def open(self, source: str | bytes | bytearray) -> Self:
+        self._open_time = datetime.now()
         if isinstance(source, bytearray):
             source = bytes(source)
         if isinstance(source, str) and source.endswith('.zip'):
@@ -422,10 +428,11 @@ class PureFb2:
                 self.__destination = destination
                 self.__process_title_info()
                 self.__process_document_info()
-                self.__process_custom()
+                self.__prepare_custom()
                 self.__process_body(args.get('typography', True))
                 self.__process_promo(args.get('promo', True))
                 self.__optimize_images(args.get('image', True))
+                self.__process_custom()
 
                 file_name = self.get_file_name()
 
@@ -466,6 +473,8 @@ class PureFb2:
                     except EnvironmentError as err:
                         print(f'Saving book to FB2 Error: {err}')
                         pass
+            if self._debug:
+                print(f'Execution time is: {datetime.now().timestamp() - self._open_time.timestamp()}')
         return self
 
     def get_source(self) -> str | bytes:
@@ -670,6 +679,7 @@ class PureFb2:
             clear_tags(parent, 'date')
             date_tag = self.__soup.new_tag('date')
             # date_value = self.atinfo.time_modified if self.atinfo.is_valid() else datetime.now().strftime('%Y-%m-%d %H:%M')
+            # self._time_modified = self.atinfo.time_updated
             date_value = self.atinfo.time_updated
             date_tag['value'] = date_value
             date_tag.string = date_value
@@ -735,18 +745,24 @@ class PureFb2:
                 self.__soup.select_one('body').append(promo)
                 promo.unwrap()
 
-    def __process_custom(self) -> None:
+    def __prepare_custom(self) -> None:
         if self.finished:
             self.add_custom_tag('status', ('fulltext' if self.atinfo.is_valid() else '3'))
         for info in self.__soup.find('description').find_all('custom-info'):
             attrs = dict({atr[0]: atr[1] for atr in info.attrs.items()})
-            if 'info-type' in attrs and attrs['info-type'] == 'donated' and info.text.lower() in ('true', '1', 'false', '0'):
-                self.add_custom_tag('donated', info.text, True)
+            if 'info-type' in attrs:
+                if attrs['info-type'] == 'donated' and info.text.lower() in ('true', '1', 'false', '0'):
+                    self.add_custom_tag('donated', info.text, True)
+                elif attrs['info-type'] == 'convert-images' and info.text.lower() in ('true', '1', 'false', '0'):
+                    self.add_custom_tag('convert-images', info.text, True)
+                    self._convert_images = self._convert_images = True if info.text.lower() in ('true', '1') else False
+
+    def __process_custom(self) -> None:
         parent = self.__soup.find('description')
         clear_tags(parent, 'custom-info')
         custom: list = self._custom_tags
+        clear_tags(parent, 'custom-info')
         if len(custom):
-            clear_tags(parent, 'custom-info')
             append_tags(self.__soup, parent, 'custom-info', custom)
 
     def __optimize_global(self, replaces: list = []) -> list:
@@ -784,26 +800,26 @@ class PureFb2:
         replaces.append([rf'>{ANYDASH}([<A-ZА-ЯҐІЇЄ\.,\'«"])', rf'>{MDASH}{NBSP}\g<1>'])
         replaces.append([rf'({ANYSP}{ANYDASH}[<A-ZА-ЯҐІЇЄ\.,\'«"])', rf'{MDASH}{NBSP}\g<1>'])
 
+        # transform linebrake (<br/>) into the single paragraph
+        #replaces.append([r'(<([^ ]+?)(?: [^>]+?)?>[^<]*?)<br\s*/>(.*?</\2>)', r'\1</\2><br /><\2>\3', re.IGNORECASE, 'UNTIL_FOUND'])
+        #replaces.append([r'<br\s*/?>', '</p><p>', re.IGNORECASE])
+
         # clean up bold, italic, underline, strike HTML tags
         replaces.append([r'<([b|i|u|s])>([\s\S]*?)</\1>', r'\g<2>', re.IGNORECASE])
         replaces.append([r'<([b|i|u|s])\s*/>', '', re.IGNORECASE])
+
+        # split multiple linebreaks into the single one
+        replaces.append([rf'(<br{ANYSP}+/>\s*)+', '<br/>', re.IGNORECASE])
 
         # optimize empty tags:
         # <strong|emphasis|strikethrough|sup|sub|code}> </strong|emphasis|strikethrough|sup|sub|code>
         # <emphasis> <strong> </strong> </emphasis>
         # <strong> <emphasis> </emphasis> </strong>
         # <strong|emphasis|strikethrough|sup|sub|code />
-        # replaces.append([
-        #    r'(?:'
-        #    r'<(strong|emphasis|strikethrough|sup|sub|code)>?\s*<(strong|emphasis|strikethrough|sup|sub|code)>\s*<(strong|emphasis|strikethrough|sup|sub|code)>\s*</\3>\s*</\2>\s*</\1>|'
-        #    r'<(strong|emphasis|strikethrough|sup|sub|code)>?\s*<(strong|emphasis|strikethrough|sup|sub|code)>\s*</\2>\s*</\1>|'
-        #    r'<(strong|emphasis|strikethrough|sup|sub|code)>\s*</\1>|'
-        #    r'<(?:strong|emphasis|strikethrough|sup|sub|code)\s*/>'
-        #    r')',
-        #    ' '])
         replaces.append([r'<(?:strong|emphasis|strikethrough|sup|sub|code)\s*/>', ' ', re.IGNORECASE])
-        # instead one very big expression we will repeat one the same unlill found :)
-        replaces.append([r'<(strong|emphasis|strikethrough|sup|sub|code)>\s*</\1>', ' ', re.IGNORECASE, 'UNTIL_FOUND'])
+        # instead one very big expression we will repeat one the same until found :)
+        replaces.append([r'<(strong|emphasis|strikethrough|sup|sub|code)>(\s*(?:<br/>)?\s*)</\1>', r'\2',
+                         re.IGNORECASE, 'UNTIL_FOUND'])
 
         # place quotes inside tags
         replaces.append([r'(["\'])(\s*)<(strong|emphasis|strikethrough|sup|sub|code)>(.*)</\3>([\s\.!\?,:]*)\1',
@@ -845,11 +861,14 @@ class PureFb2:
         replaces.append([r'<p>\s+', '<p>'])
         replaces.append([rf'\s*</p>{ANYSP}*', '</p>'])
 
+        # clear alone linebreak in paragraph and transform it to empty
+        replaces.append([r'<p><br/></p>', '<empty-line/>', re.IGNORECASE])
+
         # optimize & transform empty paragraphs
         # <p></p>, <p/>
         replaces.append([r'(?:<p>\s*?</p>|<p */>)', '<empty-line/>'])
 
-        # split multiple empty paragraphs into one
+        # split multiple empty paragraphs into the one
         replaces.append([r'(?:<empty-line/>\s*){2,}', '<empty-line/>\n'])
 
         # clear empty first & last paragraphs
@@ -857,6 +876,9 @@ class PureFb2:
         # <empty-line/></title|section>
         replaces.append([r'(?:(?:<empty-line/>\s*)?(</?(?:title|section)>)(?:\s*<empty-line/>)?)', r'\g<1>'])
 
+        # strip tags around images
+        replaces.append([r'<(strong|emphasis|strikethrough|sup|sub|code)>\s*(<image[^>]+>)\s*</\1>',  r'\g<2>',
+                         re.IGNORECASE, 'UNTIL_FOUND'])
         # extract images from paragraph
         # <p><image id="..." l:href="#..." /></p>
         # <p>text <image id="..." l:href="#..." /> text</p>
@@ -882,7 +904,6 @@ class PureFb2:
         # <empty-line/><p|subtitle><strong|emphasis|strikethrough|sup|sub|code>* * * *</strong|emphasis|strikethrough|sup|sub|code></p|subtitle><empty-line/>
         # <empty-line/><p|subtitle><strong><emphasis>* *</emphasis></strong></p|subtitle><empty-line/>
         # <empty-line/><p|subtitle><emphasis><strong>******</strong></emphasis></p|subtitle><empty-line/>
-
         replaces.append([
             rf'(?:(?:<empty-line */>)\s*)*<(p|subtitle)> ?(?:(?:<(strong|emphasis|strikethrough|sup|sub|code)> ?{ANYSUB}' +
             rf'+? ?</\2>)|(?:<strong> ?<emphasis> ?{ANYSUB}' +
@@ -890,6 +911,9 @@ class PureFb2:
             rf'+? ?</strong> ?</emphasis>)|{ANYSUB}' +
             r'+?) ?</\1>(?:\s*(?:<empty-line */>))*',
             '<subtitle>* * *</subtitle>'])
+
+        # replacing the apostrophe
+        replaces.append([r'(?<=\w)[`\'](?=\w)', '’'])
 
         return replaces
 
@@ -985,41 +1009,65 @@ class PureFb2:
         return chapters if len(chapters) else None
 
     def __optimize_images(self, process: bool = True) -> None:
+        if self._convert_images is None:
+            self._convert_images = process
         if self.__soup is not None:
+            # do not reconvert images in the future processing of this book
+            self.add_custom_tag('convert-images', 'false', True)
             for binary in self.__soup.find_all('binary'):
-                if process:
+                if self._convert_images:
                     if binary.get('content-type') in ['image/jpg', 'image/jpeg', 'image/png']:
                         # binary['id'] = re.sub(r'(.+?)\\.(jpeg|jpg|png)', r'\g<1>.jpg', binary.get('id'))
-                        binary.string = self.__optimize_image(binary.text, binary.get('content-type'), binary.get('id'))
-                        binary['content-type'] = 'image/jpg'
+                        if (image_raw := self.__optimize_image(binary.text, binary.get('content-type'), binary.get('id'))) is not None:
+                            binary.string = image_raw
+                            binary['content-type'] = 'image/jpg'
+                        else:
+                            if self._debug:
+                                print(f"Removed {binary.get('id')}")
+                            url_xmlns = f'{get_namespaces(self.__soup)["http://www.w3.org/1999/xlink"]}:' \
+                                if 'http://www.w3.org/1999/xlink' in get_namespaces(self.__soup) else ''
+                            for image in self.__soup.find_all('image'):
+                                if image.get(f'{url_xmlns}href') == '#' + binary.get('id'):
+                                    image.decompose()
+                            binary.decompose()
                 else:
                     # just normalizing the same image to the single base64 line
                     binary.string = base64.b64encode(
                         base64.b64decode(binary.text)
                     ).decode()
 
-    def __optimize_image(self, raw, mime: str, id: str = ''):
+    def __optimize_image(self, raw, mime: str, id: str = '') -> Optional[bytes]:
+        n_width = 640
+        n_height = 480
         if raw:
             if mime in ['image/jpeg', 'image/jpg', 'image/png']:
-                with Image.open(io.BytesIO(base64.b64decode(raw))) as image:
+                try:
+                    raw = base64.b64decode(raw)
+                    with Image.open(io.BytesIO(raw)) as image:
+                        if self._debug:
+                            print(f'{id} {image.mode} {mime}')
+                        if mime == 'image/png':
+                            image = image.convert('RGBA')
+                            data = image.getdata()
+                            new_data = []
+                            for item in data:
+                                if item[3] == 0:
+                                    new_data.append((239, 238, 238, 255))
+                                else:
+                                    new_data.append(item)
+                            image.putdata(new_data)
+                            # image = image.convert('RGB')
+                        if image.mode != 'RGB':
+                            image = image.convert('RGB')
+                        width, height = image.size
+                        if width > n_width or height > n_height:
+                            image.thumbnail((n_width, n_height))
+                        stream = io.BytesIO()
+                        image.save(stream, format="JPEG", subsampling=2, quality=70)
+                        # image.save(stream, format="JPEG", subsampling=2, quality='medium')
+                        raw = base64.b64encode(stream.getvalue()).decode()
+                except EnvironmentError as err:
                     if self._debug:
-                        print(f'{id} {image.mode} {mime}')
-                    if mime == 'image/png':
-                        image = image.convert('RGBA')
-                        data = image.getdata()
-                        new_data = []
-                        for item in data:
-                            if item[3] == 0:
-                                new_data.append((239, 238, 238, 255))
-                            else:
-                                new_data.append(item)
-                        image.putdata(new_data)
-                        # image = image.convert('RGB')
-                    if image.mode != 'RGB':
-                        image = image.convert('RGB')
-                    image.thumbnail((640, 480))
-                    stream = io.BytesIO()
-                    image.save(stream, format="JPEG", subsampling=2, quality=70)
-                    # image.save(stream, format="JPEG", subsampling=2, quality='medium')
-                    raw = base64.b64encode(stream.getvalue()).decode()
+                        print(f'Image Error: {err}')
+                    return None
         return raw

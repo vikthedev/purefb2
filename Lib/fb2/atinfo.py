@@ -16,6 +16,17 @@ def normalize_text(data: str = '', strip_dots: bool = False, check_single_letter
     return data
 
 
+def empty_if_none(data: str | bool | int | float) -> str | bool | int | float:
+    if isinstance(data, str):
+        return '' if data is None or data.strip() == '' else data
+    elif isinstance(data, bool):
+        return False if data is None else data
+    elif isinstance(data, int):
+        return 0 if data is None else data
+    elif isinstance(data, float):
+        return .0 if data is None else data
+
+
 class ATInfo:
     def __init__(self, available: bool = True):
         self.__url: Optional[str] = None
@@ -36,38 +47,35 @@ class ATInfo:
 
     @property
     def id(self) -> int:
-        return int(self.__data['id']) if self.is_valid() else 0
+        return empty_if_none(self.__data['id']) if self.is_valid() else 0
 
     @property
     def title(self) -> str:
-        return self.__data['title'] if self.is_valid() and self.__data['title'] is not None else ''
+        return empty_if_none(self.__data['title'])
 
     @property
     def cover(self) -> str:
-        return self.__data['cover'] if self.is_valid() and self.__data['cover'] is not None else ''
+        return empty_if_none(self.__data['cover'])
 
     @property
     def time_modified(self) -> str:
-        return self.__convert_date(self.__data['lastModificationTime']) \
-            if self.is_valid() and self.__data['lastModificationTime'] is not None else ''
+        return self.__convert_date(self.__data['lastModificationTime']) if self.is_valid() else ''
 
     @property
     def time_updated(self) -> str:
-        return self.__convert_date(self.__data['lastUpdateTime']) \
-            if self.is_valid() and self.__data['lastUpdateTime'] is not None else ''
+        return self.__convert_date(self.__data['lastUpdateTime']) if self.is_valid() else ''
 
     @property
     def time_finished(self) -> str:
-        return self.__convert_date(self.__data['finishTime']) \
-            if self.is_valid() and self.__data['finishTime'] is not None else ''
+        return self.__convert_date(self.__data['finishTime']) if self.is_valid() else ''
 
     @property
     def finished(self) -> bool:
-        return bool(self.__data['isFinished']) if self.is_valid() else False
+        return empty_if_none(self.__data['isFinished']) if self.is_valid() else False
 
     @property
     def price(self) -> float:
-        return float(self.__data['price']) if self.is_valid() and self.__data['price'] is not None else 0.0
+        return empty_if_none(self.__data['price']) if self.is_valid() else .0
 
     @property
     def authors(self) -> list[list]:
@@ -120,19 +128,19 @@ class ATInfo:
 
     @property
     def adult_only(self) -> bool:
-        return bool(self.__data['adultOnly']) if self.is_valid() else False
+        return empty_if_none(self.__data['adultOnly']) if self.is_valid() else False
 
     @property
     def likes_count(self) -> int:
-        return int(self.__data['likeCount']) if self.is_valid() and self.__data['likeCount'] is not None else 0
+        return empty_if_none(self.__data['likeCount']) if self.is_valid() else 0
 
     @property
     def rewards_count(self) -> int:
-        return int(self.__data['rewardCount']) if self.is_valid() and self.__data['rewardCount'] is not None else 0
+        return empty_if_none(self.__data['rewardCount']) if self.is_valid() else 0
 
     @property
     def comments_count(self) -> int:
-        return int(self.__data['commentCount']) if self.is_valid() and self.__data['commentCount'] is not None else 0
+        return empty_if_none(self.__data['commentCount']) if self.is_valid() else 0
 
     def series(self) -> list:
         series = []
@@ -147,7 +155,7 @@ class ATInfo:
         return self
 
     def get(self, url: str) -> Self:
-        self.url = url if url is not None else ''
+        self.url = empty_if_none(url)
         return self
 
     def is_valid(self) -> bool:
@@ -164,10 +172,10 @@ class ATInfo:
                 print(f'AT Connection Error: {err}')
                 pass
 
-    def __convert_date(self, data: str):
+    def __convert_date(self, data: str) -> str:
         return datetime.fromisoformat(data).astimezone(
             datetime.utcnow().astimezone().tzinfo
-        ).strftime(self.__date_format)
+        ).strftime(self.__date_format) if data is not None else ''
 
     def __author(self, name: str, username: str) -> Optional[list]:
         """
@@ -177,7 +185,7 @@ class ATInfo:
         """
         author = []
         if name is not None:
-            #name = name.replace('Ё', 'Е').replace('ё', 'е').strip()
+            # name = name.replace('Ё', 'Е').replace('ё', 'е').strip()
             name = re.sub(r'\s+', ' ', name).strip()
             if name != '':
                 name = name.split(' ')
@@ -195,16 +203,15 @@ class ATInfo:
         return author if len(author) > 0 else None
 
 
-def genre_name(genre: int, lang: str = 'ru') -> str:
+def genre_name(genre: int, lang: str = 'ru') -> Optional[str]:
     dictionary = genres_en if lang == 'en' else genres_ru
-    genre = genre if genre in dictionary else None
-    return dictionary[genre]
+    return None if genre is None else dictionary[genre if genre in dictionary else None]
 
 
 genres_en: dict = {
     None: 'other',
     1: 'prose_contemporary',
-    2: 'sf_fantasy',
+    2: 'fantasy',
     3: 'sf_etc',
     4: 'detective',
     5: 'det_action',
@@ -232,17 +239,17 @@ genres_en: dict = {
     35: 'sf_stimpank',
     36: 'sf',
     37: 'sf_humor',
-    38: 'sf_action',
-    39: 'sf_fantasy_city',
+    38: 'fantasy_action',
+    39: 'urban_fantasy',
     40: 'love_sf',
     41: 'sf_fantasy',
     42: 'sf_humor',
     43: 'sf_epic',
-    44: 'sf_fantasy',
+    44: 'dark_fantasy',
     45: 'love_short',
     46: 'love_history',
-    47: 'popadancy',
-    48: 'popadancy',
+    47: 'popadantsy_vo_vremeni',
+    48: 'popadantsy_v_magicheskie_miry',
     49: 'det_political',
     50: 'det_history',
     51: 'det_espionage',
@@ -259,9 +266,9 @@ genres_en: dict = {
     66: 'popadancy',
     67: 'love_contemporary',
     68: 'love_erotica',
-    69: 'sf_litrpg',
+    69: 'sf_realrpg',
     70: 'adv_history',
-    71: 'sf_fantasy_city',
+    71: 'boyar_anime',
     72: 'back_to_ussr'
 }
 
