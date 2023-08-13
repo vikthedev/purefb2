@@ -12,13 +12,16 @@ import xml.dom.minidom as xmldom
 from datetime import datetime
 from typing import Self, Optional
 
-from PIL import Image
+from PIL import Image, ImageFile
 from bs4 import BeautifulSoup, Tag, NavigableString
 
 from Lib.fb2.atinfo import ATInfo
 from Lib.fb2.zipper import InMemoryZipper, Zipper
 from Lib.transliterator import to_latin
 from Lib.typus import ru_typus
+
+# fix IOError: image file is truncated (nn bytes not processed)
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 WHSP = '\u0020'  # SPACE
 NBSP = '\u00A0'  # NO-BREAK SPACE
@@ -93,6 +96,39 @@ def append_tag(soup: BeautifulSoup, parent: Tag | NavigableString, name: str, va
         tag.string = value[2]
     parent.append(tag)
 
+def insert_tags(soup: BeautifulSoup, parent: Tag | NavigableString, name: str, values: list, position: int = 1) -> None:
+    """
+    Inserts multiple tags inside parent tag to the position
+
+    :param soup: BeautifulSoup object
+    :param parent: Parent node
+    :param name: Tag name
+    :param values: Multiple Tag values
+    :param position: Insertion position
+    :return:
+    """
+    values.reverse()
+    for value in values:
+        insert_tag(soup, parent, name, value, position)
+
+def insert_tag(soup: BeautifulSoup, parent: Tag | NavigableString, name: str, value: str | list, position: int = 1) -> None:
+    """
+    Insert tag inside parent tag to the position
+
+    :param soup: BeautifulSoup object
+    :param parent: Parent node
+    :param name: Tag name
+    :param value: Tag value
+    :param position: Insertion position
+    :return:
+    """
+    tag = soup.new_tag(name)
+    if isinstance(value, str):
+        tag.string = value
+    elif isinstance(value, list) and len(value) == 3:
+        tag[value[0]] = value[1]
+        tag.string = value[2]
+    parent.insert(position, tag)
 
 def get_namespaces(soap: BeautifulSoup, as_string: bool = False) -> dict | str:
     """
@@ -102,7 +138,7 @@ def get_namespaces(soap: BeautifulSoup, as_string: bool = False) -> dict | str:
     namespaces = {}
     namespaces_str = ''
     for ns in soap.find("FictionBook").attrs.items():
-        #namespaces.append(f'{ns[0]}="{ns[1]}"')
+        # namespaces.append(f'{ns[0]}="{ns[1]}"')
         _ns = ns[0].split(':')
         namespaces[ns[1]] = _ns[1] if len(_ns) == 2 else ''
         namespaces_str += f' {ns[0]}="{ns[1]}"'
@@ -432,6 +468,7 @@ class PureFb2:
                 self.__process_body(args.get('typography', True))
                 self.__process_promo(args.get('promo', True))
                 self.__optimize_images(args.get('image', True))
+                self.__process_section_titles()
                 self.__process_custom()
 
                 file_name = self.get_file_name()
@@ -740,7 +777,8 @@ class PureFb2:
                     url_xmlns=url_xmlns,
                     book_title=self.title
                 )
-                soup = BeautifulSoup(f'<promo {get_namespaces(self.__soup, True)}><section>{promo}</section></promo>', 'xml')
+                soup = BeautifulSoup(f'<promo {get_namespaces(self.__soup, True)}><section>{promo}</section></promo>',
+                                     'xml')
                 promo = soup.select_one('promo')
                 self.__soup.select_one('body').append(promo)
                 promo.unwrap()
@@ -796,13 +834,13 @@ class PureFb2:
 
         # add space after any dashes at dialogue & convert it into the md dash
         replaces.append([f'{ANYSP}{ANYDASH}{ANYSP}', MDASH_PAIR])
-        replaces.append([f'<p>{ANYDASH}{ANYSP}', f'<p>{MDASH}{NBSP}'])
+        replaces.append([rf'<(\w+?)>{ANYDASH}{ANYSP}', rf'<\1>{MDASH}{NBSP}'])
         replaces.append([rf'>{ANYDASH}([<A-ZА-ЯҐІЇЄ\.,\'«"])', rf'>{MDASH}{NBSP}\g<1>'])
         replaces.append([rf'({ANYSP}{ANYDASH}[<A-ZА-ЯҐІЇЄ\.,\'«"])', rf'{MDASH}{NBSP}\g<1>'])
 
         # transform linebrake (<br/>) into the single paragraph
-        #replaces.append([r'(<([^ ]+?)(?: [^>]+?)?>[^<]*?)<br\s*/>(.*?</\2>)', r'\1</\2><br /><\2>\3', re.IGNORECASE, 'UNTIL_FOUND'])
-        #replaces.append([r'<br\s*/?>', '</p><p>', re.IGNORECASE])
+        # replaces.append([r'(<([^ ]+?)(?: [^>]+?)?>[^<]*?)<br\s*/>(.*?</\2>)', r'\1</\2><br /><\2>\3', re.IGNORECASE, 'UNTIL_FOUND'])
+        # replaces.append([r'<br\s*/?>', '</p><p>', re.IGNORECASE])
 
         # clean up bold, italic, underline, strike HTML tags
         replaces.append([r'<([b|i|u|s])>([\s\S]*?)</\1>', r'\g<2>', re.IGNORECASE])
@@ -877,7 +915,7 @@ class PureFb2:
         replaces.append([r'(?:(?:<empty-line/>\s*)?(</?(?:title|section)>)(?:\s*<empty-line/>)?)', r'\g<1>'])
 
         # strip tags around images
-        replaces.append([r'<(strong|emphasis|strikethrough|sup|sub|code)>\s*(<image[^>]+>)\s*</\1>',  r'\g<2>',
+        replaces.append([r'<(strong|emphasis|strikethrough|sup|sub|code)>\s*(<image[^>]+>)\s*</\1>', r'\g<2>',
                          re.IGNORECASE, 'UNTIL_FOUND'])
         # extract images from paragraph
         # <p><image id="..." l:href="#..." /></p>
@@ -946,7 +984,8 @@ class PureFb2:
     def __get_url(self) -> str:
         url = ''
         if self.__soup is not None:
-            if (url := self.__soup.find('document-info').findChild('src-url')) is not None:
+            if self.__soup.find('document-info') is not None and \
+                    (url := self.__soup.find('document-info').findChild('src-url')) is not None:
                 url = url.text
             else:
                 url = ''
@@ -962,17 +1001,6 @@ class PureFb2:
                     sequence['number'] = '{:0>2}'.format(sequence['number'])
         return sequence
 
-    def __get_last_chapter_title(self) -> str:
-        section = ''
-        if self.__soup is not None:
-            if (sections := self.__soup.find('body').findChildren('section')) is not None:
-                index = -1 if sections[-1].findChild('title').find('p') is not None and \
-                              sections[-1].findChild('title').find('p').text.strip() != 'Nota bene' else -2
-                if (section := sections[index].findChild('title').find('p')) is not None:
-                    section = section.text.strip()
-                    section = str(section).removesuffix('.')
-        return section
-
     def __check_finished_state(self) -> bool:
         if self.__finished is None:
             for info in self.__soup.find('description').find_all('custom-info'):
@@ -985,7 +1013,8 @@ class PureFb2:
                     self.__finished = self.atinfo.finished
                 else:
                     epilogues = ['Эпилог', 'ЭПИЛОГ', 'эпилог', 'Послесловие', 'Примечания', 'ПРИМЕЧАНИЯ']
-                    self.__finished = True if any(epilogue in self.last_chapter_title for epilogue in epilogues) else False
+                    self.__finished = True if any(
+                        epilogue in self.last_chapter_title for epilogue in epilogues) else False
         return self.__finished
 
     def __check_donated_state(self) -> bool:
@@ -994,6 +1023,43 @@ class PureFb2:
             if 'info-type' in attrs and attrs['info-type'] == 'donated' and info.text.lower() in ('true', '1'):
                 return True
         return False
+
+    def __process_section_titles(self) -> None:
+        if self.__soup is not None:
+            if (bodies := self.__soup.findChildren('body')) is not None:
+                for body in bodies:
+                    if body.attrs.get('name') != 'notes':
+                        for section in body.findChildren('section'):
+                            paragraphs = []
+                            if (title := section.findChild('title')) is not None and \
+                                    title.find('p') is not None:
+                                for paragraph in title.findChildren('p'):
+                                    paragraph = normalize_text(paragraph.text, True)
+                                    if match := re.search(
+                                            rf'^((?:часть|глава|том|книга|раздел|арка)){ANYSP}*?((?:\d+\.?)+)[\.:,\-;]?{ANYSP}+?(.+)$',
+                                            paragraph, re.IGNORECASE):
+                                        paragraphs.append(f'{match.group(1).capitalize()} {match.group(2).rstrip(".")}')
+                                        paragraphs.append(match.group(3).capitalize())
+                                    else:
+                                        paragraphs.append(paragraph)
+                                if len(paragraphs):
+                                    clear_tags(title, 'p')
+                                    insert_tags(self.__soup, title, 'p', paragraphs, 1)
+
+    def __get_last_chapter_title(self) -> str:
+        section = []
+        if self.__soup is not None:
+            if (sections := self.__soup.find('body').findChildren('section')) is not None:
+                index = -1 if sections[-1].findChild('title') is not None and \
+                              sections[-1].findChild('title').find('p') is not None and \
+                              sections[-1].findChild('title').find('p').text.strip() != 'Nota bene' else -2
+                if len(sections) > abs(index) and \
+                        (titles := sections[index].findChild('title').findChildren('p')) is not None:
+                    for title in titles:
+                        title = title.text.strip()
+                        # section.append(str(title).removesuffix('.'))
+                        section.append(str(title).strip('. '))
+        return '. '.join(section) if len(section) else 'Not Found'
 
     def __get_chapters(self, root_section: list = None) -> list | None:
         chapters = []
@@ -1018,7 +1084,8 @@ class PureFb2:
                 if self._convert_images:
                     if binary.get('content-type') in ['image/jpg', 'image/jpeg', 'image/png']:
                         # binary['id'] = re.sub(r'(.+?)\\.(jpeg|jpg|png)', r'\g<1>.jpg', binary.get('id'))
-                        if (image_raw := self.__optimize_image(binary.text, binary.get('content-type'), binary.get('id'))) is not None:
+                        if (image_raw := self.__optimize_image(binary.text, binary.get('content-type'),
+                                                               binary.get('id'))) is not None:
                             binary.string = image_raw
                             binary['content-type'] = 'image/jpg'
                         else:
@@ -1042,8 +1109,7 @@ class PureFb2:
         if raw:
             if mime in ['image/jpeg', 'image/jpg', 'image/png']:
                 try:
-                    raw = base64.b64decode(raw)
-                    with Image.open(io.BytesIO(raw)) as image:
+                    with Image.open(io.BytesIO(base64.b64decode(raw))) as image:
                         if self._debug:
                             print(f'{id} {image.mode} {mime}')
                         if mime == 'image/png':

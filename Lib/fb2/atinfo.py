@@ -269,7 +269,8 @@ genres_en: dict = {
     69: 'sf_realrpg',
     70: 'adv_history',
     71: 'boyar_anime',
-    72: 'back_to_ussr'
+    72: 'back_to_ussr',
+    73: 'wuxia'
 }
 
 genres_ru: dict = {
@@ -333,5 +334,6 @@ genres_ru: dict = {
     69: 'РеалРПГ',
     70: 'Исторические приключения',
     71: 'Бояръ-Аниме',
-    72: 'Назад в СССР'
+    72: 'Назад в СССР',
+    73: 'Уся'
 }
