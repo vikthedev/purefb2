@@ -244,8 +244,15 @@ def process_replaces(data: str = '', replaces: Optional[list] = None):
     return data
 
 
-def empty_if_none(data: str) -> str:
-    return '' if data is None or data.strip() == '' else data
+def empty_if_none(data: str | bool | int | float) -> str | bool | int | float:
+    if isinstance(data, str):
+        return '' if data is None or data.strip() == '' else data
+    elif isinstance(data, bool):
+        return False if data is None else data
+    elif isinstance(data, int):
+        return 0 if data is None else data
+    elif isinstance(data, float):
+        return .0 if data is None else data
 
 
 class PureFb2:
