@@ -35,7 +35,7 @@ FDASH = '‒'  # FIGURE DASH
 NDASH = '–'  # EN DASH
 MDASH = '—'  # EM DASH
 # TMDASH = '⸺'  # TWO-EM DASH
-ANYDASH = r'[{}{}{}{}{}]'.format(HMINUS, MINUS, FDASH, NDASH, MDASH)
+ANYDASH = r'[\{}\{}\{}\{}\{}]'.format(HMINUS, MINUS, FDASH, NDASH, MDASH)
 # MDASH_PAIR = NNBSP + MDASH + THNSP
 MDASH_PAIR = NBSP + MDASH + WHSP
 
@@ -54,8 +54,6 @@ def max_filename_length(path):
 
 def clear_tags(parent: Tag | NavigableString, name: str) -> None:
     """
-
-    :param soup:
     :param parent:
     :param name:
     :return:
@@ -96,6 +94,7 @@ def append_tag(soup: BeautifulSoup, parent: Tag | NavigableString, name: str, va
         tag.string = value[2]
     parent.append(tag)
 
+
 def insert_tags(soup: BeautifulSoup, parent: Tag | NavigableString, name: str, values: list, position: int = 1) -> None:
     """
     Inserts multiple tags inside parent tag to the position
@@ -111,7 +110,9 @@ def insert_tags(soup: BeautifulSoup, parent: Tag | NavigableString, name: str, v
     for value in values:
         insert_tag(soup, parent, name, value, position)
 
-def insert_tag(soup: BeautifulSoup, parent: Tag | NavigableString, name: str, value: str | list, position: int = 1) -> None:
+
+def insert_tag(soup: BeautifulSoup, parent: Tag | NavigableString, name: str, value: str | list,
+               position: int = 1) -> None:
     """
     Insert tag inside parent tag to the position
 
@@ -129,6 +130,7 @@ def insert_tag(soup: BeautifulSoup, parent: Tag | NavigableString, name: str, va
         tag[value[0]] = value[1]
         tag.string = value[2]
     parent.insert(position, tag)
+
 
 def get_namespaces(soap: BeautifulSoup, as_string: bool = False) -> dict | str:
     """
@@ -236,23 +238,60 @@ def process_replaces(data: str = '', replaces: Optional[list] = None):
         for r in replaces:
             replace = r[1] if len(r) > 1 else ''
             flags = r[2] if len(r) > 2 else re.NOFLAG
-            if len(r) > 3 and r[3] == 'UNTIL_FOUND':
-                while re.search(f'{r[0]}', data, flags):
-                    data = re.sub(f'{r[0]}', replace, data, 0, flags)
+            if len(r) > 3:
+                if r[3] == 'UNTIL_FOUND':
+                    while re.search(f'{r[0]}', data, flags):
+                        data = re.sub(f'{r[0]}', replace, data, 0, flags)
+                elif r[3] == 'EXECUTIVE':
+                    data = re.sub(f'{r[0]}', eval(replace), data, 0, flags)
             else:
                 data = re.sub(f'{r[0]}', replace, data, 0, flags)
     return data
 
 
-def empty_if_none(data: str | bool | int | float) -> str | bool | int | float:
-    if isinstance(data, str):
-        return '' if data is None or data.strip() == '' else data
-    elif isinstance(data, bool):
-        return False if data is None else data
-    elif isinstance(data, int):
-        return 0 if data is None else data
-    elif isinstance(data, float):
-        return .0 if data is None else data
+def extract_linebrakes_in_body(match):
+    data = match.group()
+    if data.find(r'<br/>') != -1:
+        # print('extract linebrakes: true')
+        if (soup := BeautifulSoup(data, 'xml')) is not None \
+                and (body := soup.find('body')) is not None:
+            # and body.attrs.get('name', 'content') == 'content':
+
+            # Находим все теги <br/> и получаем их родительские теги
+            br_tags = body.find_all('br')
+            for index, br_tag in enumerate(br_tags):
+                index = index + 1
+                parents = []
+                for parent in br_tag.find_parents():
+                    if parent.name:
+                        if parent.name == 'section' or parent.name == 'title':  # or parent.name == 'body':
+                            break
+                        if parent.name == 'a':
+                            href = parent.get('href')
+                            parents.append((parent.name, href))
+                        else:
+                            parents.append(parent.name)
+                        if parent.name == 'p':
+                            break
+
+                result = None
+                if parents:
+                    tags_reversed = list(reversed(parents))  # Преобразуем итератор в список
+                    opening_tags = ''.join(
+                        ['<{0}>'.format(tag) if isinstance(tag, str) else '<{0} href="{1}">'.format(tag[0], tag[1]) for
+                         tag
+                         in tags_reversed])
+                    closing_tags = ''.join(
+                        ['</{0}>'.format(tag) if isinstance(tag, str) else '</{0}>'.format(tag[0]) for tag in
+                         tags_reversed[::-1]])
+                    result = f"{closing_tags}{opening_tags}"
+                #data = data.replace('<br/>', str_if_none(result, '<empty-line/>'), 1)
+                data = data.replace('<br/>', str_if_none(result), 1)
+    return data
+
+
+def str_if_none(data, default: str = '') -> str:
+    return default if data is None or not isinstance(data, str) else data
 
 
 class PureFb2:
@@ -345,11 +384,11 @@ class PureFb2:
 
     @property
     def time_created(self) -> str:
-        return empty_if_none(self._time_created)
+        return str_if_none(self._time_created)
 
     @property
     def time_modified(self) -> str:
-        return empty_if_none(self._time_modified)
+        return str_if_none(self._time_modified)
 
     @property
     def sequence(self) -> Optional[dict]:
@@ -753,7 +792,7 @@ class PureFb2:
                 parent.insert(2, date_tag)
 
                 programs = []
-                if (programs_used := parent.select_one('program-used')) is not None:
+                if (programs_used := parent.select_one('program-used')) is not None and programs_used.string:
                     # re.split('\s*,\s*', programs_used.string)
                     for program_used in programs_used.string.split(','):
                         if '' != (program_used := program_used.strip()) and program_used != 'PureFB2':
@@ -800,7 +839,7 @@ class PureFb2:
                     self.add_custom_tag('donated', info.text, True)
                 elif attrs['info-type'] == 'convert-images' and info.text.lower() in ('true', '1', 'false', '0'):
                     self.add_custom_tag('convert-images', info.text, True)
-                    self._convert_images = self._convert_images = True if info.text.lower() in ('true', '1') else False
+                    self._convert_images = True if info.text.lower() in ('true', '1') else False
 
     def __process_custom(self) -> None:
         parent = self.__soup.find('description')
@@ -845,16 +884,13 @@ class PureFb2:
         replaces.append([rf'>{ANYDASH}([<A-ZА-ЯҐІЇЄ\.,\'«"])', rf'>{MDASH}{NBSP}\g<1>'])
         replaces.append([rf'({ANYSP}{ANYDASH}[<A-ZА-ЯҐІЇЄ\.,\'«"])', rf'{MDASH}{NBSP}\g<1>'])
 
-        # transform linebrake (<br/>) into the single paragraph
-        # replaces.append([r'(<([^ ]+?)(?: [^>]+?)?>[^<]*?)<br\s*/>(.*?</\2>)', r'\1</\2><br /><\2>\3', re.IGNORECASE, 'UNTIL_FOUND'])
-        # replaces.append([r'<br\s*/?>', '</p><p>', re.IGNORECASE])
-
         # clean up bold, italic, underline, strike HTML tags
         replaces.append([r'<([b|i|u|s])>([\s\S]*?)</\1>', r'\g<2>', re.IGNORECASE])
         replaces.append([r'<([b|i|u|s])\s*/>', '', re.IGNORECASE])
 
-        # split multiple linebreaks into the single one
-        replaces.append([rf'(<br{ANYSP}+/>\s*)+', '<br/>', re.IGNORECASE])
+        # split two consecutive tags into the single one
+        replaces.append([r'</(strong|emphasis|strikethrough|sup|sub|code)>(\s*)<\1>', r'\g<2>',
+                         re.IGNORECASE, 'UNTIL_FOUND'])
 
         # optimize empty tags:
         # <strong|emphasis|strikethrough|sup|sub|code}> </strong|emphasis|strikethrough|sup|sub|code>
@@ -865,6 +901,19 @@ class PureFb2:
         # instead one very big expression we will repeat one the same until found :)
         replaces.append([r'<(strong|emphasis|strikethrough|sup|sub|code)>(\s*(?:<br/>)?\s*)</\1>', r'\2',
                          re.IGNORECASE, 'UNTIL_FOUND'])
+
+        # split multiple linebreaks into the single one
+        replaces.append([rf'(<br{ANYSP}*/>\s*)+', '<br/>', re.IGNORECASE])
+
+        # clear alone linebreak in paragraph and transform it to empty
+        replaces.append([r'<p><br/></p>', '<empty-line/>', re.IGNORECASE])
+
+        # clear start & finish linebreaks in paragraph
+        replaces.append([r'<br/></p>', '</p>', re.IGNORECASE])
+        replaces.append([r'<p>\s*<br/>', '<p>', re.IGNORECASE])
+
+        # transform linebrake (<br/>) into the single paragraph
+        replaces.append([r'<body.*?</body>', 'extract_linebrakes_in_body', re.IGNORECASE | re.DOTALL, 'EXECUTIVE'])
 
         # place quotes inside tags
         replaces.append([r'(["\'])(\s*)<(strong|emphasis|strikethrough|sup|sub|code)>(.*)</\3>([\s\.!\?,:]*)\1',
@@ -906,9 +955,6 @@ class PureFb2:
         replaces.append([r'<p>\s+', '<p>'])
         replaces.append([rf'\s*</p>{ANYSP}*', '</p>'])
 
-        # clear alone linebreak in paragraph and transform it to empty
-        replaces.append([r'<p><br/></p>', '<empty-line/>', re.IGNORECASE])
-
         # optimize & transform empty paragraphs
         # <p></p>, <p/>
         replaces.append([r'(?:<p>\s*?</p>|<p */>)', '<empty-line/>'])
@@ -940,7 +986,7 @@ class PureFb2:
             r'<\g<1>>\g<2>'])
         replaces.append([r'<p>(\s*)</p>', r'\g<1>'])
 
-        # very strange fact - single image in section broke whole document
+        # very strange fact - single image in section broke the whole document
         # let's add the empty line
         replaces.append([r'(<section>\s*<image[^>]+?>)(\s*</section>)', r'\g<1>\n<empty-line/>\g<2>'])
 
@@ -1032,6 +1078,7 @@ class PureFb2:
         return False
 
     def __process_section_titles(self) -> None:
+        TITLE_SEPARATOR = r'[\.:,\{}\{}\{}\{}\{};\s]'.format(HMINUS, MINUS, FDASH, NDASH, MDASH)
         if self.__soup is not None:
             if (bodies := self.__soup.findChildren('body')) is not None:
                 for body in bodies:
@@ -1043,10 +1090,15 @@ class PureFb2:
                                 for paragraph in title.findChildren('p'):
                                     paragraph = normalize_text(paragraph.text, True)
                                     if match := re.search(
-                                            rf'^((?:часть|глава|том|книга|раздел|арка)){ANYSP}*?((?:\d+\.?)+)[\.:,\-;]?{ANYSP}+?(.+)$',
-                                            paragraph, re.IGNORECASE):
+                                            rf'^((?:часть|глава|том|книга|раздел|арка)){ANYSP}*?((?:\d+\.?)+){TITLE_SEPARATOR}+(.+)$',
+                                            paragraph, re.IGNORECASE | re.MULTILINE):
                                         paragraphs.append(f'{match.group(1).capitalize()} {match.group(2).rstrip(".")}')
-                                        paragraphs.append(match.group(3).capitalize())
+                                        paragraphs.append(re.sub(
+                                            r'^(["«\']?)(\w)(.*)$',
+                                            lambda mo: f'{mo.group(1)}{mo.group(2).capitalize()}{mo.group(3)}',
+                                            match.group(3)
+                                        ))
+
                                     else:
                                         paragraphs.append(paragraph)
                                 if len(paragraphs):
@@ -1060,12 +1112,11 @@ class PureFb2:
                 index = -1 if sections[-1].findChild('title') is not None and \
                               sections[-1].findChild('title').find('p') is not None and \
                               sections[-1].findChild('title').find('p').text.strip() != 'Nota bene' else -2
-                if len(sections) > abs(index) and \
-                        (titles := sections[index].findChild('title').findChildren('p')) is not None:
-                    for title in titles:
-                        title = title.text.strip()
-                        # section.append(str(title).removesuffix('.'))
-                        section.append(str(title).strip('. '))
+                if len(sections) >= abs(index) and \
+                        (title := sections[index].findChild('title')) is not None and \
+                        (paragraphs := title.findChildren('p')) is not None:
+                    for paragraph in paragraphs:
+                        section.append(paragraph.text.strip().removesuffix('.'))
         return '. '.join(section) if len(section) else 'Not Found'
 
     def __get_chapters(self, root_section: list = None) -> list | None:
@@ -1082,13 +1133,14 @@ class PureFb2:
         return chapters if len(chapters) else None
 
     def __optimize_images(self, process: bool = True) -> None:
-        if self._convert_images is None:
-            self._convert_images = process
+        # if self._convert_images is None:
+        #    self._convert_images = process
+
         if self.__soup is not None:
-            # do not reconvert images in the future processing of this book
-            self.add_custom_tag('convert-images', 'false', True)
+            # reconvert only new images in the future processing of this book
+            self.add_custom_tag('convert-images', 'true', True)
             for binary in self.__soup.find_all('binary'):
-                if self._convert_images:
+                if self._convert_images is True or (self._convert_images is None and process):
                     if binary.get('content-type') in ['image/jpg', 'image/jpeg', 'image/png']:
                         # binary['id'] = re.sub(r'(.+?)\\.(jpeg|jpg|png)', r'\g<1>.jpg', binary.get('id'))
                         if (image_raw := self.__optimize_image(binary.text, binary.get('content-type'),
@@ -1113,13 +1165,14 @@ class PureFb2:
     def __optimize_image(self, raw, mime: str, id: str = '') -> Optional[bytes]:
         n_width = 640
         n_height = 480
+        # self._convert_images is True
         if raw:
             if mime in ['image/jpeg', 'image/jpg', 'image/png']:
                 try:
                     with Image.open(io.BytesIO(base64.b64decode(raw))) as image:
-                        if self._debug:
-                            print(f'{id} {image.mode} {mime}')
+                        convert_image = False if self._convert_images is True else True
                         if mime == 'image/png':
+                            convert_image = True
                             image = image.convert('RGBA')
                             data = image.getdata()
                             new_data = []
@@ -1131,14 +1184,22 @@ class PureFb2:
                             image.putdata(new_data)
                             # image = image.convert('RGB')
                         if image.mode != 'RGB':
+                            convert_image = True
                             image = image.convert('RGB')
                         width, height = image.size
                         if width > n_width or height > n_height:
+                            convert_image = True
                             image.thumbnail((n_width, n_height))
-                        stream = io.BytesIO()
-                        image.save(stream, format="JPEG", subsampling=2, quality=70)
-                        # image.save(stream, format="JPEG", subsampling=2, quality='medium')
-                        raw = base64.b64encode(stream.getvalue()).decode()
+                        if convert_image:
+                            if self._debug:
+                                print(f'{id} {image.mode} {mime}')
+                            stream = io.BytesIO()
+                            image.save(stream, format="JPEG", subsampling=2, quality=70)
+                            # image.save(stream, format="JPEG", subsampling=2, quality='medium')
+                            raw = stream.getvalue()
+                        else:
+                            raw = base64.b64decode(raw)
+                        raw = base64.b64encode(raw).decode()
                 except EnvironmentError as err:
                     if self._debug:
                         print(f'Image Error: {err}')

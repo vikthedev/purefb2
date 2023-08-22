@@ -16,15 +16,20 @@ def normalize_text(data: str = '', strip_dots: bool = False, check_single_letter
     return data
 
 
-def empty_if_none(data: str | bool | int | float) -> str | bool | int | float:
-    if isinstance(data, str):
-        return '' if data is None or data.strip() == '' else data
-    elif isinstance(data, bool):
-        return False if data is None else data
-    elif isinstance(data, int):
-        return 0 if data is None else data
-    elif isinstance(data, float):
-        return .0 if data is None else data
+def str_if_none(data, default: str = '') -> str:
+    return default if data is None or not isinstance(data, str) else data
+
+
+def bool_if_none(data: bool, default: bool = False) -> bool:
+    return default if data is None else data
+
+
+def int_if_none(data: int, default: int = 0) -> int:
+    return default if data is None else data
+
+
+def float_if_none(data: float, default: float = .0) -> float:
+    return default if data is None else data
 
 
 class ATInfo:
@@ -47,15 +52,15 @@ class ATInfo:
 
     @property
     def id(self) -> int:
-        return empty_if_none(self.__data['id']) if self.is_valid() else 0
+        return int_if_none(self.__data['id']) if self.is_valid() else 0
 
     @property
     def title(self) -> str:
-        return empty_if_none(self.__data['title'])
+        return str_if_none(self.__data['title'])
 
     @property
     def cover(self) -> str:
-        return empty_if_none(self.__data['cover'])
+        return str_if_none(self.__data['cover'])
 
     @property
     def time_modified(self) -> str:
@@ -71,11 +76,11 @@ class ATInfo:
 
     @property
     def finished(self) -> bool:
-        return empty_if_none(self.__data['isFinished']) if self.is_valid() else False
+        return bool_if_none(self.__data['isFinished']) if self.is_valid() else False
 
     @property
     def price(self) -> float:
-        return empty_if_none(self.__data['price']) if self.is_valid() else .0
+        return float_if_none(self.__data['price']) if self.is_valid() else .0
 
     @property
     def authors(self) -> list[list]:
@@ -128,19 +133,19 @@ class ATInfo:
 
     @property
     def adult_only(self) -> bool:
-        return empty_if_none(self.__data['adultOnly']) if self.is_valid() else False
+        return bool_if_none(self.__data['adultOnly']) if self.is_valid() else False
 
     @property
     def likes_count(self) -> int:
-        return empty_if_none(self.__data['likeCount']) if self.is_valid() else 0
+        return int_if_none(self.__data['likeCount']) if self.is_valid() else 0
 
     @property
     def rewards_count(self) -> int:
-        return empty_if_none(self.__data['rewardCount']) if self.is_valid() else 0
+        return int_if_none(self.__data['rewardCount']) if self.is_valid() else 0
 
     @property
     def comments_count(self) -> int:
-        return empty_if_none(self.__data['commentCount']) if self.is_valid() else 0
+        return int_if_none(self.__data['commentCount']) if self.is_valid() else 0
 
     def series(self) -> list:
         series = []
@@ -155,7 +160,7 @@ class ATInfo:
         return self
 
     def get(self, url: str) -> Self:
-        self.url = empty_if_none(url)
+        self.url = str_if_none(url)
         return self
 
     def is_valid(self) -> bool:
